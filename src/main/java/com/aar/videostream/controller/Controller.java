@@ -55,4 +55,20 @@ public class Controller {
 			vidCap.release();
 		}
 	}
+
+	// TEMP ENDPOINT FOR PERFORMANCE PROFILING
+	@GetMapping("/profile")
+	public void profileTest(){
+		VideoCapture vidCap = new VideoCapture("C:\\Users\\User\\Documents\\workspace-spring-tools-for-eclipse-4.31.0.RELEASE\\AAR_VID_REVISED\\src\\main\\resources\\profiling\\test-clip.mp4");
+		try {
+			while(!vidCap.isOpened()) continue;
+			ArrayList<char[][]> result = aarService.processVideoObject(vidCap, 300, 200);
+			aarService.playProcessedObject(result);
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			vidCap.release();
+		}
+	}
 }
