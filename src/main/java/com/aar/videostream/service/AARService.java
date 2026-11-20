@@ -1,5 +1,6 @@
 package com.aar.videostream.service;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 import org.bytedeco.javacpp.indexer.UByteIndexer;
@@ -27,13 +28,18 @@ public class AARService {
     	int rows = image.rows();
     	int cols = image.cols();
     	char[][] ascii = new char[rows][cols];
-    	try (UByteIndexer indexer = image.createIndexer()) {
-    		for(int y=0;y<rows;y++) {
-    			for(int x=0;x<cols;x++) {
-    				int gradientIndx = (indexer.get(y, x) * (GRADIENT_ARRAY.length-1)) / 255;
-    				ascii[y][x] = GRADIENT_ARRAY[gradientIndx];
-    			}
-    		}
+		ByteBuffer buffer = image.data().asByteBuffer();
+		byte[] bytes = new byte[buffer.remaining()];
+		buffer.get(bytes);
+		for(int y=0;y<rows;y++) {
+			int rowOffset = y*cols;
+			for(int x=0;x<cols;x++) {
+				int offset = (rowOffset+x);
+				int pixelValue = bytes[offset] & 0xFF; 
+				int gradientIndx = (pixelValue * (GRADIENT_ARRAY.length-1)) / 255;
+				ascii[y][x] = GRADIENT_ARRAY[gradientIndx];
+			}
+
     	}
     	return ascii;
     }
