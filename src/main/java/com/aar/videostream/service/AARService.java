@@ -1,9 +1,6 @@
 package com.aar.videostream.service;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
-
-import org.bytedeco.javacpp.indexer.UByteIndexer;
 import org.bytedeco.opencv.global.opencv_core;
 import org.bytedeco.opencv.global.opencv_highgui;
 import org.bytedeco.opencv.global.opencv_imgproc;
@@ -25,31 +22,58 @@ public class AARService {
     private FPSCounter fpsCounter;
 	
 	public char[][] generateAsciiArt(Mat image) {
-    	int rows = image.rows();
-    	int cols = image.cols();
-    	char[][] ascii = new char[rows][cols];
-		ByteBuffer buffer = image.data().asByteBuffer();
-		byte[] bytes = new byte[buffer.remaining()];
-		buffer.get(bytes);
-		for(int y=0;y<rows;y++) {
-			int rowOffset = y*cols;
-			for(int x=0;x<cols;x++) {
-				int offset = (rowOffset+x);
-				int pixelValue = bytes[offset] & 0xFF; 
-				int gradientIndx = (pixelValue * (GRADIENT_ARRAY.length-1)) / 255;
-				ascii[y][x] = GRADIENT_ARRAY[gradientIndx];
+		int rows = image.rows();
+		int cols = image.cols();
+		char[][] ascii = new char[rows][cols];
+		for (int y = 0; y < rows; y++) {
+			org.bytedeco.javacpp.BytePointer row = image.ptr(y);
+			for (int x = 0; x < cols; x++) {
+				int pixelValue = row.get(x) & 0xFF;
+				int gradientIndex = (pixelValue * (GRADIENT_ARRAY.length - 1)) / 255;
+				ascii[y][x] = GRADIENT_ARRAY[gradientIndex];
 			}
+		}
+		return ascii;
+	}
 
-    	}
-    	return ascii;
-    }
+	private byte[][] createGlyphCache(int diffScale) {
+		byte[][] glyphCache = new byte[128][];
+		for (char character : GRADIENT_ARRAY) {
+			Mat glyph = new Mat(diffScale, diffScale, opencv_core.CV_8UC1, new Scalar(0, 0, 0, 0));
+			opencv_imgproc.putText(glyph, String.valueOf(character), new Point(0, diffScale), fontFace, fontScale, fontColor, thickness, lineType, false);
+			byte[] glyphPixels = new byte[diffScale * diffScale];
+			glyph.data().get(glyphPixels);
+			glyphCache[character] = glyphPixels;
+			glyph.close();
+		}
+		return glyphCache;
+	}
+
+	private void renderAsciiFrame(char[][] frame, int diffScale, int displayWidth, byte[][] glyphCache, byte[] framePixels, Mat display) {
+		for (int i = 0; i < frame.length; i++) {
+			for (int j = 0; j < frame[i].length; j++) {
+				byte[] glyphPixels = glyphCache[frame[i][j]];
+				for (int glyphRow = 0; glyphRow < diffScale; glyphRow++) {
+					int sourceOffset = glyphRow * diffScale;
+					int targetOffset = (i * diffScale + glyphRow) * displayWidth + j * diffScale;
+					System.arraycopy(glyphPixels, sourceOffset, framePixels, targetOffset, diffScale);
+				}
+			}
+		}
+		display.data().put(framePixels);
+	}
+
     public void processVideoStream(VideoCapture camera, int scale_y, int scale_x, int diffScale, boolean fpsToggle) {
     	if(!camera.isOpened()) throw new RuntimeException("Camera is not Opened");
     	int x = -1;
     	Mat frame = new Mat();
     	Mat grayFrame = new Mat();
     	Mat resizedFrame = new Mat();
-    	Mat display = new Mat();
+		int displayWidth = scale_x * diffScale;
+		int displayHeight = scale_y * diffScale;
+		byte[][] glyphCache = createGlyphCache(diffScale);
+		byte[] framePixels = new byte[displayWidth * displayHeight];
+		Mat display = new Mat(displayHeight, displayWidth, opencv_core.CV_8UC1, new Scalar(0, 0, 0, 0));
 		if(!fpsToggle) {fpsCounter = new FPSCounter();}
     	
 		while(!camera.read(frame)) continue;
@@ -58,12 +82,7 @@ public class AARService {
     		opencv_imgproc.cvtColor(frame, grayFrame, opencv_imgproc.COLOR_BGR2GRAY);
     		opencv_imgproc.resize(grayFrame, resizedFrame, new Size(scale_x, scale_y));
     		char[][] result = generateAsciiArt(resizedFrame);
-    		display = new Mat(scale_y*diffScale, scale_x*diffScale, opencv_core.CV_8UC1, new Scalar(0,0,0,0));
-    		for(int i=0;i<scale_y;i++) {
-    			for(int j=0;j<scale_x;j++) {
-    				opencv_imgproc.putText(display, String.valueOf(result[i][j]), new Point(j*diffScale, i*diffScale), fontFace, fontScale, fontColor, thickness, lineType, false);
-    			}
-    		}
+	    		renderAsciiFrame(result, diffScale, displayWidth, glyphCache, framePixels, display);
 			if(!fpsToggle) {
 				double fps = fpsCounter.getFPS(System.nanoTime());
 				opencv_imgproc.putText(display, String.format("FPS : %f", fps), new Point(10, 30), fontFace, fontScale*8, fontColor);
@@ -73,6 +92,7 @@ public class AARService {
     		if(x!=-1) break;
     	}
     	opencv_highgui.destroyWindow("ascii_stream");
+		display.close();
     	camera.release();
     }
     
@@ -109,18 +129,19 @@ public class AARService {
     	int scale_y = processedObject.get(0).length;
     	int x = -1;
     	int diffScale = 5;
+		int displayWidth = scale_x * diffScale;
+		int displayHeight = scale_y * diffScale;
+		byte[][] glyphCache = createGlyphCache(diffScale);
+		Mat display = new Mat(displayHeight, displayWidth, opencv_core.CV_8UC1, new Scalar(0, 0, 0, 0));
+		byte[] framePixels = new byte[displayWidth * displayHeight];
     	
 		for(char[][] frame : processedObject) {
-			Mat display = new Mat(scale_y*diffScale, scale_x*diffScale, opencv_core.CV_8UC1, new Scalar(0,0,0,0));
-    		for(int i=0;i<scale_y;i++) {
-    			for(int j=0;j<scale_x;j++) {
-    				opencv_imgproc.putText(display, String.valueOf(frame[i][j]), new Point(j*diffScale, i*diffScale), fontFace, fontScale, fontColor, thickness, lineType, false);
-    			}
-    		}
-    		opencv_highgui.imshow("ascii_stream", display);
+			renderAsciiFrame(frame, diffScale, displayWidth, glyphCache, framePixels, display);
+			opencv_highgui.imshow("ascii_stream", display);
     		x = opencv_highgui.waitKey(1);
     		if(x!=-1) break;
     	}
     	opencv_highgui.destroyWindow("ascii_stream");
+		display.close();
     }
 }
