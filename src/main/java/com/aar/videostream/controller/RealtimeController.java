@@ -2,11 +2,13 @@ package com.aar.videostream.controller;
 
 import org.bytedeco.opencv.opencv_videoio.VideoCapture;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.aar.videostream.service.AARService;
 
+@RequestMapping("/realtime")
 @RestController
 public class RealtimeController {
 	private final AARService aarService;
@@ -19,7 +21,7 @@ public class RealtimeController {
 		this.aarService = aarService;
 	}
 
-	@GetMapping(value = "/realtime/help", produces = "text/plain")
+	@GetMapping(value = "/help", produces = "text/plain")
 	public String realtimeHelp() {
 		return "GET /realtime/{diffScale}\n"
 				+ "Opens the default camera and displays its ASCII video stream.\n"
@@ -29,12 +31,12 @@ public class RealtimeController {
 				+ "Example: GET /realtime/5";
 	}
 
-	@GetMapping(value = "/realtime", produces = "text/plain")
+	@GetMapping(produces = "text/plain")
 	public String realtime() {
 		return realtimeHelp();
 	}
 
-	@GetMapping("/realtime")
+	@GetMapping
 	public void realtime(
         @RequestParam(name = "diffScale", required = false) Integer diffScale,
         @RequestParam(name = "y", required = false) Integer y,
